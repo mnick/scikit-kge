@@ -34,7 +34,12 @@ def init_randn(sz):
 class Parameter(np.ndarray):
 
     def __new__(cls, *args, **kwargs):
-        arr = Parameter._init_array(args[0], args[1])
+        # TODO: hackish, find better way to handle higher-order parameters
+        if len(args[0]) == 3:
+                sz = (args[0][1], args[0][2])
+                arr = np.array([Parameter._init_array(sz, args[1]) for _ in range(args[0][0])])
+        else:
+                arr = Parameter._init_array(args[0], args[1])
         arr = arr.view(cls)
         arr.name = kwargs.pop('name', None)
         arr.post = kwargs.pop('post', None)
