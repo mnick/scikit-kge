@@ -17,7 +17,7 @@ class TransE(Model):
         self.add_param('E', (self.sz[0], self.ncomp), post=normalize)
         self.add_param('R', (self.sz[2], self.ncomp))
 
-    def scores(self, ss, ps, os):
+    def _scores(self, ss, ps, os):
         score = self.E[ss] + self.R[ps] - self.E[os]
         if self.l1:
             score = np.abs(score)
@@ -31,8 +31,8 @@ class TransE(Model):
         # indices of negative triples
         sn, pn, on = unzip_triples(nxs)
 
-        pscores = self.scores(sp, pp, op)
-        nscores = self.scores(sn, pn, on)
+        pscores = self._scores(sp, pp, op)
+        nscores = self._scores(sn, pn, on)
         ind = np.where(nscores + self.margin > pscores)[0]
 
         # all examples in batch satify margin criterion
