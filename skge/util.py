@@ -65,3 +65,24 @@ def unzip_triples(xys, with_ys=False):
         return np.array(ss), np.array(ps), np.array(os), np.array(ys)
     else:
         return np.array(ss), np.array(ps), np.array(os)
+
+
+def to_tensor(xs, ys, sz):
+    T = [sp.lil_matrix((sz[0], sz[1])) for _ in range(sz[2])]
+    for i in range(len(xs)):
+        i, j, k = xs[i]
+        T[k][i, j] = ys[i]
+    return T
+
+
+def init_nvecs(xs, ys, sz, rank, with_T=False):
+    from scipy.sparse.linalg import eigsh
+
+    T = to_tensor(xs, ys, sz)
+    T = [Tk.tocsr() for Tk in T]
+    S = sum([T[k] + T[k].T for k in range(len(T))])
+    _, E = eigsh(sp.csr_matrix(S), rank)
+    if not with_T:
+        return E
+    else:
+        return E, T
