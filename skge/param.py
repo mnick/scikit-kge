@@ -1,24 +1,10 @@
+import sys
 import numpy as np
 from numpy import sqrt, squeeze, zeros_like
 from numpy.random import randn, uniform
 
 
-class ParamInit(object):
-    """
-    Class to initialize weights
-    """
-
-    def __init__(self, method):
-        if not hasattr(self, method):
-            raise ValueError('Unknown initialization (%s)' % method)
-        self.method = method
-
-    def __call__(self, sz):
-        if len(sz) != 2:
-            raise ValueError('Shape must be of size 2')
-        return getattr(self, self.method)(sz)
-
-    def unif(self, sz):
+def init_unif(sz):
         """
         Uniform intialization
 
@@ -28,7 +14,8 @@ class ParamInit(object):
         p = uniform(low=-bnd, high=bnd, size=sz)
         return squeeze(p)
 
-    def nunif(self, sz):
+
+def init_nunif(sz):
         """
         Normalized uniform initialization
 
@@ -39,40 +26,75 @@ class ParamInit(object):
         p = uniform(low=-bnd, high=bnd, size=sz)
         return squeeze(p)
 
-    def randn(self, sz):
+
+def init_randn(sz):
         return squeeze(randn(*sz))
 
 
-class SGDUpdate(object):
-    """
-    Class to perform SGD updates on a parameter
-    """
+class Parameter(np.ndarray):
 
-    def __init(self, param, learning_rate):
+    def __new__(cls, *args, **kwargs):
+        arr = Parameter._init_array(args[0], args[1])
+        arr = arr.view(cls)
+        arr.name = kwargs.pop('name', None)
+        arr.post = kwargs.pop('post', None)
+
+        if arr.post is not None:
+            arr = arr.post(arr)
+
+        return arr
+
+    def __array_finalize__(self, obj):
+        if obj is None:
+            return
+        self.name = getattr(obj, 'name', None)
+        self.post = getattr(obj, 'post', None)
+
+    @staticmethod
+    def _init_array(shape, method):
+        mod = sys.modules[__name__]
+        method = 'init_%s' % method
+        if not hasattr(mod, method):
+            raise ValueError('Unknown initialization (%s)' % method)
+        elif len(shape) != 2:
+            raise ValueError('Shape must be of size 2')
+        return getattr(mod, method)(shape)
+
+
+class ParameterUpdate(object):
+
+    def __init__(self, param, learning_rate):
         self.param = param
         self.learning_rate = learning_rate
 
-    def __call__(self, g, idx=None):
-        self.param[idx] -= self.learning_rate * g
+    def __call__(self, gradient, idx=None):
+        self._update(gradient, idx)
+        if self.param.post is not None:
+            self.param = self.param.post(self.param, idx)
 
     def reset(self):
         pass
 
 
-class AdaGradUpdate(object):
+class SGD(ParameterUpdate):
+    """
+    Class to perform SGD updates on a parameter
+    """
 
-    def __init__(self, param, learning_rate, post_update=None):
-        self.param = param
-        self.learning_rate = learning_rate
+    def _update(self, g, idx):
+        self.param[idx] -= self.learning_rate * g
+
+
+class AdaGrad(ParameterUpdate):
+
+    def __init__(self, param, learning_rate):
+        super(AdaGrad, self).__init__(param, learning_rate)
         self.p2 = zeros_like(param)
-        self.post_udpate = post_update
 
-    def __call__(self, g, idx=None):
+    def _update(self, g, idx=None):
         self.p2[idx] += g * g
         H = np.maximum(np.sqrt(self.p2[idx]), 1e-7)
         self.param[idx] -= self.learning_rate * g / H
-        if self.post_udpate is not None:
-            self.param = self.post_udpate(self.param, idx)
 
     def reset(self):
         self.p2 = zeros_like(self.p2)
