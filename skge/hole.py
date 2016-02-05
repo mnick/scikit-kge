@@ -1,7 +1,7 @@
 import numpy as np
-from skge.base import Model, StochasticTrainer, PairwiseStochasticTrainer
+from skge.base import Model
 from skge.util import grad_sum_matrix, unzip_triples, ccorr, cconv
-from skge.param import ParamInit, normless1
+from skge.param import normless1
 import skge.actfun as af
 
 
@@ -9,51 +9,21 @@ class HolE(Model):
 
     def __init__(self, *args, **kwargs):
         super(HolE, self).__init__(*args, **kwargs)
-        self.sz = args[0]
-        self.ncomp = args[1]
-        self.rparam = kwargs.pop('rparam', 0.0)
-
-    def __getstate__(self):
-        st = super(HolE, self).__getstate__()
-        st.update({
-            'sz': self.sz,
-            'ncomp': self.ncomp,
-            'rparam': self.rparam,
-            'E': self.E,
-            'R': self.R
-        })
-        return st
+        self.add_hyperparam('sz', args[0])
+        self.add_hyperparam('ncomp', args[1])
+        self.add_hyperparam('rparam', kwargs.pop('rparam', 0.0))
+        self.add_hyperparam('af', kwargs.pop('af', af.Sigmoid))
+        self.add_param('E', (self.sz[0], self.ncomp), post=normless1)
+        self.add_param('R', (self.sz[2], self.ncomp))
 
     def _scores(self, ss, ps, os):
         return np.sum(self.R[ps] * ccorr(self.E[ss], self.E[os]), axis=1)
 
-    def _init_factors(self, xs, ys):
-        pinit = ParamInit(self.init)
-        self.E = pinit((self.sz[0], self.ncomp))
-        self.R = pinit((self.sz[2], self.ncomp))
-        self.E = normless1(self.E)
-
-        self.ups = [
-            #self.param_updater(self.E, self.learning_rate, normless1),
-            self.param_updater(self.E, self.learning_rate),
-            self.param_updater(self.R, self.learning_rate)
-        ]
-
-    def _batch_step(self, res):
-        ge, gr, eidx, ridx = res
-
-        # object role update
-        self.ups[0](ge, eidx)
-        self.ups[1](gr, ridx)
-
-
-class StochasticHolE(HolE, StochasticTrainer):
-
-    def _batch_gradients(self, xys):
+    def _gradients(self, xys):
         ss, ps, os, ys = unzip_triples(xys, with_ys=True)
 
         yscores = ys * self._scores(ss, ps, os)
-        self.loss += np.sum(np.logaddexp(0, -yscores))
+        self.loss = np.sum(np.logaddexp(0, -yscores))
         #preds = af.Sigmoid.f(yscores)
         fs = -(ys * af.Sigmoid.f(-yscores))[:, np.newaxis]
         #self.loss -= np.sum(np.log(preds))
@@ -69,21 +39,9 @@ class StochasticHolE(HolE, StochasticTrainer):
         ))) / n
         ge += self.rparam * self.E[eidx]
 
-        return ge, gr, eidx, ridx
+        return {'E': (ge, eidx), 'R':(gr, ridx)}
 
-
-class PairwiseStochasticHolE(HolE, PairwiseStochasticTrainer):
-
-    def __init__(self, *args, **kwargs):
-        super(PairwiseStochasticHolE, self).__init__(*args, **kwargs)
-        self.af = kwargs.pop('af', af.Sigmoid)
-
-    def __getstate__(self):
-        st = super(PairwiseStochasticHolE, self).__getstate__()
-        st.update({'af': self.af.key()})
-        return st
-
-    def _batch_gradients(self, pxs, nxs):
+    def _pairwise_gradients(self, pxs, nxs):
         # indices of positive examples
         sp, pp, op = unzip_triples(pxs)
         # indices of negative examples
@@ -96,7 +54,7 @@ class PairwiseStochasticHolE(HolE, PairwiseStochasticTrainer):
 
         # find examples that violate margin
         ind = np.where(nscores + self.margin > pscores)[0]
-        self.nviolations += len(ind)
+        self.nviolations = len(ind)
         if len(ind) == 0:
             return
 
@@ -124,4 +82,4 @@ class PairwiseStochasticHolE(HolE, PairwiseStochasticTrainer):
         ge = Sm.dot(np.vstack((geip, gein, gejp, gejn))) / n
         #ge += self.rparam * self.E[eidx]
 
-        return ge, gr, eidx, ridx
+        return {'E': (ge, eidx), 'R':(gr, ridx)}
