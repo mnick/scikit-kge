@@ -1,3 +1,8 @@
+"""
+Sampling strategies to generate negative examples from knowledge graphs
+with an open-world assumption
+"""
+
 from copy import deepcopy
 from collections import defaultdict as ddict
 from numpy.random import randint
@@ -85,6 +90,9 @@ class CorruptedSampler(Sampler):
 
 
 class LCWASampler(RandomModeSampler):
+    """
+    Sample negative examples according to the local closed world assumption
+    """
 
     def __init__(self, n, modes, xs, sz):
         super(LCWASampler, self).__init__(n, modes, xs, sz)
