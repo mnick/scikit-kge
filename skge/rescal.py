@@ -1,9 +1,8 @@
 import numpy as np
 from numpy import dot
-from skge.base import Model, StochasticTrainer, PairwiseStochasticTrainer
-from skge.base import PredicateAlgorithmMixin, PredicateMarginAlgorithmMixin
-from skge.util import grad_sum_matrix, init_nvecs, unzip_triples
-from skge.param import ParamInit
+from skge.base import Model
+from skge.base import PredicateAlgorithmMixin
+from skge.util import grad_sum_matrix, unzip_triples
 import skge.actfun as af
 from collections import defaultdict
 
@@ -19,41 +18,15 @@ class RESCAL(Model):
 
     def __init__(self, *args, **kwargs):
         super(RESCAL, self).__init__(*args, **kwargs)
-        self.sz = args[0]
-        self.ncomp = args[1]
-        self.rparam = kwargs.pop('rparam', 0.0)
-        self.init = kwargs.pop('init', 'nunif')
+        self.add_hyperparam('sz', args[0])
+        self.add_hyperparam('ncomp', args[1])
+        self.add_hyperparam('rparam', kwargs.pop('rparam', 0.0))
+        self.add_hyperparam('af', kwargs.pop('af', af.Sigmoid))
+        self.add_param('E', (self.sz[0], self.ncomp))
+        # TODO: support eigenvector initialization
+        self.add_param('W', (self.sz[2], self.ncomp, self.ncomp))
 
-    def __getstate__(self):
-        st = super(RESCAL, self).__getstate__()
-        st.update({
-            'sz': self.sz,
-            'ncomp': self.ncomp,
-            'rparam': self.rparam,
-            'E': self.E,
-            'W': self.W,
-        })
-        return st
-
-    def _init_factors(self, xs, ys):
-        if self.init == 'nvecs':
-            self.E, T = init_nvecs(xs, ys, self.sz, self.ncomp, with_T=True)
-            self.W = np.array([
-                dot(self.E.T, Ti.dot(self.E)) for Ti in T
-            ])
-        else:
-            pinit = ParamInit(self.init)
-            self.E = pinit((self.sz[0], self.ncomp))
-            self.W = np.array([
-                pinit((self.ncomp, self.ncomp)) for _ in range(self.sz[2])
-            ])
-
-        self.ups = [
-            self.param_updater(self.E, self.learning_rate),
-            self.param_updater(self.W, self.learning_rate)
-        ]
-        #self.E = normalize(self.E)
-
+    # TODO: this is not used right now
     def _prepare_model(self):
         self.cache = defaultdict(lambda: {'s': {}, 'o': {}})
         for p, so in self.upmap.items():
@@ -68,23 +41,15 @@ class RESCAL(Model):
             for i in range(len(ss))
         ])
 
-    def _batch_step(self, res):
-        ge, gw, eidx, pidx = res
-
-        # object role update
-        self.ups[0](ge, eidx)
-        self.ups[1](gw, pidx)
-
-
-class StochasticRESCAL(RESCAL, StochasticTrainer, PredicateAlgorithmMixin):
-
-    def _batch_gradients(self, xys):
+    def _gradients(self, xys):
         ss, ps, os, ys = unzip_triples(xys, with_ys=True)
 
-        EW = np.array([self.cache[ps[i]]['s'][ss[i]] for i in range(len(ys))])
-        WE = np.array([self.cache[ps[i]]['o'][os[i]] for i in range(len(ys))])
+        #EW = np.array([self.cache[ps[i]]['s'][ss[i]] for i in range(len(ys))])
+        #WE = np.array([self.cache[ps[i]]['o'][os[i]] for i in range(len(ys))])
+        EW = np.array([dot(self.E[s], self.W[p]) for ((s, _, p), _) in xys])
+        WE = np.array([dot(self.W[p], self.E[o]) for ((_, o, p), _) in xys])
         yscores = ys * np.sum(self.E[ss] * WE, axis=1)
-        self.loss += np.sum(np.logaddexp(0, -yscores))
+        self.loss = np.sum(np.logaddexp(0, -yscores))
         fs = -(ys * af.Sigmoid.f(-yscores))[:, np.newaxis]
         #preds = af.Sigmoid.f(scores)
         #fs = -(ys / (1 + np.exp(yscores)))[:, np.newaxis]
@@ -93,7 +58,8 @@ class StochasticRESCAL(RESCAL, StochasticTrainer, PredicateAlgorithmMixin):
         #fs = (scores - ys)[:, np.newaxis]
         #self.loss += np.sum(fs * fs)
 
-        pidx = list(self.upmap.keys())
+        #pidx = list(self.upmap.keys())
+        pidx = np.unique(ps)
         gw = np.zeros((len(pidx), self.ncomp, self.ncomp))
         for i in range(len(pidx)):
             p = pidx[i]
@@ -108,25 +74,9 @@ class StochasticRESCAL(RESCAL, StochasticTrainer, PredicateAlgorithmMixin):
         ge = Sm.dot(np.vstack((fs * WE, fs * EW))) / n
         ge += self.rparam * self.E[eidx]
 
-        return ge, gw, eidx, pidx
+        return {'E': (ge, eidx), 'W': (gw, pidx)}
 
-
-class PairwiseStochasticRESCAL(
-        RESCAL,
-        PairwiseStochasticTrainer,
-        PredicateMarginAlgorithmMixin
-):
-
-    def __init__(self, *args, **kwargs):
-        super(PairwiseStochasticRESCAL, self).__init__(*args, **kwargs)
-        self.af = kwargs.pop('af', af.Sigmoid)
-
-    def __getstate__(self):
-        st = super(PairwiseStochasticRESCAL, self).__getstate__()
-        st.update({'af': self.af.key()})
-        return st
-
-    def _batch_gradients(self, pxs, nxs):
+    def _pairwise_gradients(self, pxs, nxs):
         # indices of positive examples
         sp, pp, op = unzip_triples(pxs)
         # indices of negative examples
@@ -135,8 +85,11 @@ class PairwiseStochasticRESCAL(
         pxs, _ = np.array(list(zip(*pxs)))
         nxs, _ = np.array(list(zip(*nxs)))
 
-        WEp = np.array([self.cache[p]['o'][o] for _, o, p in pxs])
-        WEn = np.array([self.cache[p]['o'][o] for _, o, p in nxs])
+
+        #WEp = np.array([self.cache[p]['o'][o] for _, o, p in pxs])
+        #WEn = np.array([self.cache[p]['o'][o] for _, o, p in nxs])
+        WEp = np.array([dot(self.W[p], self.E[o]) for _, o, p in pxs])
+        WEn = np.array([dot(self.W[p], self.E[o]) for _, o, p in nxs])
         pscores = self.af.f(np.sum(self.E[sp] * WEp, axis=1))
         nscores = self.af.f(np.sum(self.E[sn] * WEn, axis=1))
 
@@ -144,7 +97,7 @@ class PairwiseStochasticRESCAL(
 
         # find examples that violate margin
         ind = np.where(nscores + self.margin > pscores)[0]
-        self.nviolations += len(ind)
+        self.nviolations = len(ind)
         if len(ind) == 0:
             return
 
@@ -152,12 +105,14 @@ class PairwiseStochasticRESCAL(
         gpscores = -self.af.g_given_f(pscores)[:, np.newaxis]
         gnscores = self.af.g_given_f(nscores)[:, np.newaxis]
 
-        pidx = list(self.upmap.keys())
+        pidx = np.unique(list(pp) + list(pn))
         gw = np.zeros((len(pidx), self.ncomp, self.ncomp))
         for pid in range(len(pidx)):
             p = pidx[pid]
-            ppidx = np.intersect1d(ind, self.pmapp[p])
-            npidx = np.intersect1d(ind, self.pmapn[p])
+            #ppidx = np.intersect1d(ind, self.pmapp[p])
+            #npidx = np.intersect1d(ind, self.pmapn[p])
+            ppidx = np.where(pp == p)
+            npidx = np.where(pn == p)
             assert(len(ppidx) == len(npidx))
             if len(ppidx) == 0 and len(npidx) == 0:
                 continue
@@ -170,12 +125,14 @@ class PairwiseStochasticRESCAL(
         sp, sn = list(sp[ind]), list(sn[ind])
         op, on = list(op[ind]), list(on[ind])
         gpscores, gnscores = gpscores[ind], gnscores[ind]
-        EWp = np.array([self.cache[p]['s'][s] for s, _, p in pxs[ind]])
-        EWn = np.array([self.cache[p]['s'][s] for s, _, p in nxs[ind]])
+        # EWp = np.array([self.cache[p]['s'][s] for s, _, p in pxs[ind]])
+        # EWn = np.array([self.cache[p]['s'][s] for s, _, p in nxs[ind]])
+        EWp = np.array([dot(self.E[s], self.W[p]) for s, _, p in pxs])
+        EWn = np.array([dot(self.E[s], self.W[p]) for s, _, p in nxs])
         eidx, Sm, n = grad_sum_matrix(sp + sn + op + on)
         ge = (Sm.dot(np.vstack((
             gpscores * WEp[ind], gnscores * WEn[ind],
             gpscores * EWp, gnscores * EWn
         ))) + self.rparam * self.E[eidx]) / n
 
-        return ge, gw, eidx, pidx
+        return {'E': (ge, eidx), 'W': (gw, pidx)}
