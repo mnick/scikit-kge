@@ -1,7 +1,7 @@
 import numpy as np
 from numpy import dot
 from skge.base import Model, StochasticTrainer, PairwiseStochasticTrainer
-from skge.optim import PredicateAlgorithmMixin, PredicateMarginAlgorithmMixin
+from skge.base import PredicateAlgorithmMixin, PredicateMarginAlgorithmMixin
 from skge.util import grad_sum_matrix, init_nvecs, unzip_triples
 from skge.param import ParamInit
 import skge.actfun as af
@@ -9,6 +9,13 @@ from collections import defaultdict
 
 
 class RESCAL(Model):
+    """
+    Base class for RESCAL
+
+    Use either
+    - StochasticRESCAL: to train via RESCAL via logistic loss
+    - PairwiseStochasticRESCAL: to train RESCAL via ranking loss
+    """
 
     def __init__(self, *args, **kwargs):
         super(RESCAL, self).__init__(*args, **kwargs)
@@ -16,7 +23,6 @@ class RESCAL(Model):
         self.ncomp = args[1]
         self.rparam = kwargs.pop('rparam', 0.0)
         self.init = kwargs.pop('init', 'nunif')
-        self.af = kwargs.pop('af', af.Sigmoid)
 
     def __getstate__(self):
         st = super(RESCAL, self).__getstate__()
@@ -26,7 +32,6 @@ class RESCAL(Model):
             'rparam': self.rparam,
             'E': self.E,
             'W': self.W,
-            'af': self.af.key(),
         })
         return st
 
@@ -78,10 +83,12 @@ class StochasticRESCAL(RESCAL, StochasticTrainer, PredicateAlgorithmMixin):
 
         EW = np.array([self.cache[ps[i]]['s'][ss[i]] for i in range(len(ys))])
         WE = np.array([self.cache[ps[i]]['o'][os[i]] for i in range(len(ys))])
-        scores = np.sum(self.E[ss] * WE, axis=1)
-        preds = af.Sigmoid.f(scores)
-        fs = -(ys / (1 + np.exp(ys * scores)))[:, np.newaxis]
-        self.loss -= np.sum(ys * np.log(preds))
+        yscores = ys * np.sum(self.E[ss] * WE, axis=1)
+        self.loss += np.sum(np.logaddexp(0, -yscores))
+        fs = -(ys * af.Sigmoid.f(-yscores))[:, np.newaxis]
+        #preds = af.Sigmoid.f(scores)
+        #fs = -(ys / (1 + np.exp(yscores)))[:, np.newaxis]
+        #self.loss -= np.sum(ys * np.log(preds))
 
         #fs = (scores - ys)[:, np.newaxis]
         #self.loss += np.sum(fs * fs)
@@ -109,6 +116,15 @@ class PairwiseStochasticRESCAL(
         PairwiseStochasticTrainer,
         PredicateMarginAlgorithmMixin
 ):
+
+    def __init__(self, *args, **kwargs):
+        super(PairwiseStochasticRESCAL, self).__init__(*args, **kwargs)
+        self.af = kwargs.pop('af', af.Sigmoid)
+
+    def __getstate__(self):
+        st = super(PairwiseStochasticRESCAL, self).__getstate__()
+        st.update({'af': self.af.key()})
+        return st
 
     def _batch_gradients(self, pxs, nxs):
         # indices of positive examples
@@ -163,42 +179,3 @@ class PairwiseStochasticRESCAL(
         ))) + self.rparam * self.E[eidx]) / n
 
         return ge, gw, eidx, pidx
-
-
-class RESCALAdaGradL1(RESCAL, PredicateMarginAlgorithmMixin):
-
-    def _init_factors(self, xs, ys):
-        super(RESCALAdaGradL1, self)._init_factors(xs, ys)
-        self.gE = np.zeros_like(self.E)
-        self.gW = np.zeros_like(self.W)
-        self.gE2 = np.zeros_like(self.E)
-        self.gW2 = np.zeros_like(self.W)
-        self.cr = np.zeros(self.W.shape[0])
-
-    def _batch_step(self, res):
-        ge, gw, eidx, pidx = res
-
-        # update entities
-        #tpn.gE[self.es] += self.gE.data
-        self.gE2[eidx] += ge * ge
-        #tpn.E[self.es] = ada_threshold_pd(
-        #    tpn.gE[self.es],
-        #    tpn.gE2[self.es],
-        #    tpn.lambdas[0],
-        #    tpn.ce[self.es],
-        #    tpn.learning_rate)
-        #tpn.ce[self.es] += 1
-
-        self.E[eidx] -= ada_step(ge, self.gE2[eidx], self.learning_rate)
-        self.E = normalize(self.E, eidx)
-
-        # update predicates
-        self.gW[pidx] += gw
-        self.gW2[pidx] += gw * gw
-        self.W[pidx] = ada_threshold_pd(
-            gw,
-            self.gW2[pidx],
-            self.lambdas[1],
-            self.cr[pidx],
-            self.learning_rate)
-        self.cr[pidx] += 1
