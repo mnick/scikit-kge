@@ -1,6 +1,6 @@
 import numpy as np
 from skge.base import Model, StochasticTrainer, PairwiseStochasticTrainer
-from skge.util import ccorr, cconv, grad_sum_matrix, unzip_triples
+from skge.util import grad_sum_matrix, unzip_triples, ccorr, cconv
 from skge.param import ParamInit, normless1
 import skge.actfun as af
 
@@ -12,7 +12,6 @@ class HolE(Model):
         self.sz = args[0]
         self.ncomp = args[1]
         self.rparam = kwargs.pop('rparam', 0.0)
-        self.af = kwargs.pop('af', af.Sigmoid)
 
     def __getstate__(self):
         st = super(HolE, self).__getstate__()
@@ -20,7 +19,6 @@ class HolE(Model):
             'sz': self.sz,
             'ncomp': self.ncomp,
             'rparam': self.rparam,
-            'af': self.af.key(),
             'E': self.E,
             'R': self.R
         })
@@ -36,8 +34,8 @@ class HolE(Model):
         self.E = normless1(self.E)
 
         self.ups = [
-            self.param_updater(self.E, self.learning_rate, normless1),
-            #self.param_updater(self.E, self.learning_rate),
+            #self.param_updater(self.E, self.learning_rate, normless1),
+            self.param_updater(self.E, self.learning_rate),
             self.param_updater(self.R, self.learning_rate)
         ]
 
@@ -55,9 +53,10 @@ class StochasticHolE(HolE, StochasticTrainer):
         ss, ps, os, ys = unzip_triples(xys, with_ys=True)
 
         yscores = ys * self._scores(ss, ps, os)
-        preds = af.Sigmoid.f(yscores)
+        self.loss += np.sum(np.logaddexp(0, -yscores))
+        #preds = af.Sigmoid.f(yscores)
         fs = -(ys * af.Sigmoid.f(-yscores))[:, np.newaxis]
-        self.loss -= np.sum(np.log(preds))
+        #self.loss -= np.sum(np.log(preds))
 
         ridx, Sm, n = grad_sum_matrix(ps)
         gr = Sm.dot(fs * ccorr(self.E[ss], self.E[os])) / n
@@ -74,6 +73,15 @@ class StochasticHolE(HolE, StochasticTrainer):
 
 
 class PairwiseStochasticHolE(HolE, PairwiseStochasticTrainer):
+
+    def __init__(self, *args, **kwargs):
+        super(PairwiseStochasticHolE, self).__init__(*args, **kwargs)
+        self.af = kwargs.pop('af', af.Sigmoid)
+
+    def __getstate__(self):
+        st = super(PairwiseStochasticHolE, self).__getstate__()
+        st.update({'af': self.af.key()})
+        return st
 
     def _batch_gradients(self, pxs, nxs):
         # indices of positive examples
