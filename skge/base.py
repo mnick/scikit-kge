@@ -132,7 +132,7 @@ class StochasticTrainer(object):
 
         for self.epoch in range(1, self.max_epochs + 1):
             # shuffle training examples
-            self.pre_epoch()
+            self._pre_epoch()
             shuffle(idx)
 
             # store epoch for callback
@@ -154,11 +154,12 @@ class StochasticTrainer(object):
         if self.samplef is not None:
             xys += self.samplef(xys)
 
-        if hasattr(self, '_prepare_batch_step'):
-            self._prepare_batch_step(xys)
+        if hasattr(self.model, '_prepare_batch_step'):
+            self.model._prepare_batch_step(xys)
 
         # take step for batch
         grads = self.model._gradients(xys)
+        self.loss += self.model.loss
         self._batch_step(grads)
 
     def _batch_step(self, grads):
@@ -195,7 +196,7 @@ class PairwiseStochasticTrainer(StochasticTrainer):
         else:
             self._optim(list(zip(xs, ys)))
 
-    def pre_epoch(self):
+    def _pre_epoch(self):
         self.nviolations = 0
         if self.samplef is None:
             shuffle(self.pxs)
@@ -215,8 +216,8 @@ class PairwiseStochasticTrainer(StochasticTrainer):
                 nxs.append((self.nxs[xy], 1))
 
         # take step for batch
-        if hasattr(self, '_prepare_batch_step'):
-            self._prepare_batch_step(pxs, nxs)
+        if hasattr(self.model, '_prepare_batch_step'):
+            self.model._prepare_batch_step(pxs, nxs)
         grads = self.model._pairwise_gradients(pxs, nxs)
 
         # update if examples violate margin
@@ -238,19 +239,15 @@ class PredicateAlgorithmMixin:
             upmap[p]['o'].add(o)
         return dict(pmap), dict(upmap)
 
-    def _prepare_batch_step(self, xs):
-        self.pmap, self.upmap = self._prepare_triples(xs)
-        self._prepare_model()
-
-
-class PredicateMarginAlgorithmMixin(PredicateAlgorithmMixin):
-
-    def _prepare_batch_step(self, pxs, nxs):
-        self.pmapp, self.upmap = self._prepare_triples(pxs)
-        self.pmapn, upmapn = self._prepare_triples(nxs)
-        for p, so in upmapn.items():
-            self.upmap[p]['s'] = self.upmap[p]['s'].union(so['s'])
-            self.upmap[p]['o'] = self.upmap[p]['o'].union(so['o'])
+    def _prepare_batch_step(self, xs, nxs=None):
+        if nxs is None:
+            self.pmap, self.upmap = self._prepare_triples(xs)
+        else:
+            self.pmapp, self.upmap = self._prepare_triples(xs)
+            self.pmapn, upmapn = self._prepare_triples(nxs)
+            for p, so in upmapn.items():
+                self.upmap[p]['s'] = self.upmap[p]['s'].union(so['s'])
+                self.upmap[p]['o'] = self.upmap[p]['o'].union(so['o'])
         self._prepare_model()
 
 
