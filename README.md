@@ -10,13 +10,20 @@ with desired training method. For instance, to train [holographic embeddings of 
 ```python
 from skge import HolE, StochasticTrainer
 
-N = 100000
-M = 1000
+# Load knowledge graph 
+# N = number of entities
+# M = number of relations
+# xs = list of (subject, object, predicte) triples
+# ys = list of truth values for triples (1 = true, -1 = false)
+N, M, xs, ys = load_data('path to data')
 
-xs, ys = load_data('path to data')
-
+# instantiate HolE
 model = HolE((N, N, M), 100)
+
+# instantiate trainer
 trainer = StochasticTrainer(model)
+
+# fit model to knowledge graph
 trainer.fit(xs, ys)
 ```
 
