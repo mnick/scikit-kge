@@ -1,6 +1,10 @@
 # Knowledge Graph Embeddings
 
-scikit-kge is a Python library to compute embeddings of knowledge graphs.
+scikit-kge is a Python library to compute embeddings of knowledge graphs. The
+library consists of different building blocks to train and develop models for
+knowledge graph embeddings. These buildings blocks are described in the following:
+
+### Model (skge.base.Model)
 
 Instantiating a model, e.g. HolE
 ```python
@@ -11,6 +15,8 @@ model = HolE(
     rparam=self.args.rparam
 )
 ```
+
+### Trainer 
 
 Training a model with logistic loss function
 ```python
