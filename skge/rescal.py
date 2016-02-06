@@ -1,8 +1,8 @@
 import numpy as np
 from numpy import dot
 from skge.base import Model
-from skge.base import PredicateAlgorithmMixin
 from skge.util import grad_sum_matrix, unzip_triples, memoized
+from skge.param import normless1
 import skge.actfun as af
 from collections import defaultdict
 
@@ -21,7 +21,9 @@ class RESCAL(Model):
         self.add_hyperparam('sz', args[0])
         self.add_hyperparam('ncomp', args[1])
         self.add_hyperparam('rparam', kwargs.pop('rparam', 0.0))
-        self.add_hyperparam('af', kwargs.pop('af', af.Sigmoid))
+        aff = kwargs.pop('af', 'linear')
+        self.add_hyperparam('af', af.afuns[aff])
+        #self.add_param('E', (self.sz[0], self.ncomp), post=normless1)
         self.add_param('E', (self.sz[0], self.ncomp))
         # TODO: support eigenvector initialization
         self.add_param('W', (self.sz[2], self.ncomp, self.ncomp))
@@ -44,8 +46,6 @@ class RESCAL(Model):
         @memoized
         def _WE(s, o, p): return dot(self.W[p], self.E[o])
 
-        #EW = np.array([self.cache[ps[i]]['s'][ss[i]] for i in range(len(ys))])
-        #WE = np.array([self.cache[ps[i]]['o'][os[i]] for i in range(len(ys))])
         EW = np.array([_EW(*x) for (x, _) in xys])
         WE = np.array([_WE(*x) for (x, _) in xys])
         yscores = ys * np.sum(self.E[ss] * WE, axis=1)
@@ -58,7 +58,6 @@ class RESCAL(Model):
         #fs = (scores - ys)[:, np.newaxis]
         #self.loss += np.sum(fs * fs)
 
-        #pidx = list(self.upmap.keys())
         pidx = np.unique(ps)
         gw = np.zeros((len(pidx), self.ncomp, self.ncomp))
         for i in range(len(pidx)):
@@ -85,11 +84,17 @@ class RESCAL(Model):
         pxs, _ = np.array(list(zip(*pxs)))
         nxs, _ = np.array(list(zip(*nxs)))
 
+        # define memoized functions to cache expensive dot products
+        # helps only if xys have repeated (s,p) or (p,o) pairs
+        # this happens with sampling
+        @memoized
+        def _EW(s, o, p): return dot(self.E[s], self.W[p])
 
-        #WEp = np.array([self.cache[p]['o'][o] for _, o, p in pxs])
-        #WEn = np.array([self.cache[p]['o'][o] for _, o, p in nxs])
-        WEp = np.array([dot(self.W[p], self.E[o]) for _, o, p in pxs])
-        WEn = np.array([dot(self.W[p], self.E[o]) for _, o, p in nxs])
+        @memoized
+        def _WE(s, o, p): return dot(self.W[p], self.E[o])
+
+        WEp = np.array([_WE(*x) for x in pxs])
+        WEn = np.array([_WE(*x) for x in nxs])
         pscores = self.af.f(np.sum(self.E[sp] * WEp, axis=1))
         nscores = self.af.f(np.sum(self.E[sn] * WEn, axis=1))
 
@@ -109,8 +114,6 @@ class RESCAL(Model):
         gw = np.zeros((len(pidx), self.ncomp, self.ncomp))
         for pid in range(len(pidx)):
             p = pidx[pid]
-            #ppidx = np.intersect1d(ind, self.pmapp[p])
-            #npidx = np.intersect1d(ind, self.pmapn[p])
             ppidx = np.where(pp == p)
             npidx = np.where(pn == p)
             assert(len(ppidx) == len(npidx))
@@ -125,10 +128,8 @@ class RESCAL(Model):
         sp, sn = list(sp[ind]), list(sn[ind])
         op, on = list(op[ind]), list(on[ind])
         gpscores, gnscores = gpscores[ind], gnscores[ind]
-        # EWp = np.array([self.cache[p]['s'][s] for s, _, p in pxs[ind]])
-        # EWn = np.array([self.cache[p]['s'][s] for s, _, p in nxs[ind]])
-        EWp = np.array([dot(self.E[s], self.W[p]) for s, _, p in pxs])
-        EWn = np.array([dot(self.E[s], self.W[p]) for s, _, p in nxs])
+        EWp = np.array([_EW(*x) for x in pxs[ind]])
+        EWn = np.array([_EW(*x) for x in nxs[ind]])
         eidx, Sm, n = grad_sum_matrix(sp + sn + op + on)
         ge = (Sm.dot(np.vstack((
             gpscores * WEp[ind], gnscores * WEn[ind],

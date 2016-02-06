@@ -18,8 +18,8 @@ class Linear(ActivationFunction):
 
     @staticmethod
     def g_given_f(fx):
-        return 1
-        #return np.ones(fx.shape[0])
+        #return 1
+        return np.ones(fx.shape[0])
 
     # return np.ones((fx.shape[0], 1))
 
