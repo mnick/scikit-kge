@@ -1,6 +1,8 @@
 import numpy as np
 from numpy.fft import fft, ifft
 import scipy.sparse as sp
+import functools
+import collections
 
 
 def cconv(a, b):
@@ -86,3 +88,37 @@ def init_nvecs(xs, ys, sz, rank, with_T=False):
         return E
     else:
         return E, T
+
+
+class memoized(object):
+    '''
+    Decorator. Caches a function's return value each time it is called.
+    If called later with the same arguments, the cached value is returned
+    (not reevaluated).
+
+    see https://wiki.python.org/moin/PythonDecoratorLibrary#Memoize
+    '''
+
+    def __init__(self, func):
+        self.func = func
+        self.cache = {}
+
+    def __call__(self, *args):
+        if not isinstance(args, collections.Hashable):
+            # uncachable, return direct function application
+            return self.func(*args)
+        if args in self.cache:
+            print('HIT')
+            return self.cache[args]
+        else:
+            val = self.func(*args)
+            self.cache[args] = val
+            return val
+
+    def __repr__(self):
+        '''return function's docstring'''
+        return self.func.__doc__
+
+    def __get__(self, obj, objtype):
+        '''support instance methods'''
+        return functools.partial(self.__call__, obj)

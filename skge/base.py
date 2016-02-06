@@ -226,31 +226,6 @@ class PairwiseStochasticTrainer(StochasticTrainer):
             self._batch_step(grads)
 
 
-class PredicateAlgorithmMixin:
-
-    def _prepare_triples(self, xys):
-        pmap = defaultdict(list)
-        upmap = defaultdict(lambda: {'s': set(), 'o': set()})
-        for i in range(len(xys)):
-            x, y = xys[i]
-            s, o, p = x
-            pmap[p].append(i)
-            upmap[p]['s'].add(s)
-            upmap[p]['o'].add(o)
-        return dict(pmap), dict(upmap)
-
-    def _prepare_batch_step(self, xs, nxs=None):
-        if nxs is None:
-            self.pmap, self.upmap = self._prepare_triples(xs)
-        else:
-            self.pmapp, self.upmap = self._prepare_triples(xs)
-            self.pmapn, upmapn = self._prepare_triples(nxs)
-            for p, so in upmapn.items():
-                self.upmap[p]['s'] = self.upmap[p]['s'].union(so['s'])
-                self.upmap[p]['o'] = self.upmap[p]['o'].union(so['o'])
-        self._prepare_model()
-
-
 def sigmoid(fs):
     # compute elementwise gradient for sigmoid
     for i in range(len(fs)):

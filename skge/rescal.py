@@ -2,7 +2,7 @@ import numpy as np
 from numpy import dot
 from skge.base import Model
 from skge.base import PredicateAlgorithmMixin
-from skge.util import grad_sum_matrix, unzip_triples
+from skge.util import grad_sum_matrix, unzip_triples, memoized
 import skge.actfun as af
 from collections import defaultdict
 
@@ -26,15 +26,6 @@ class RESCAL(Model):
         # TODO: support eigenvector initialization
         self.add_param('W', (self.sz[2], self.ncomp, self.ncomp))
 
-    # TODO: this is not used right now
-    def _prepare_model(self):
-        self.cache = defaultdict(lambda: {'s': {}, 'o': {}})
-        for p, so in self.upmap.items():
-            for s in so['s']:
-                self.cache[p]['s'][s] = dot(self.E[s], self.W[p])
-            for o in so['o']:
-                self.cache[p]['o'][o] = dot(self.W[p], self.E[o])
-
     def _scores(self, ss, ps, os):
         return np.array([
             dot(self.E[ss[i]], dot(self.W[ps[i]], self.E[os[i]]))
@@ -44,10 +35,19 @@ class RESCAL(Model):
     def _gradients(self, xys):
         ss, ps, os, ys = unzip_triples(xys, with_ys=True)
 
+        # define memoized functions to cache expensive dot products
+        # helps only if xys have repeated (s,p) or (p,o) pairs
+        # this happens with sampling
+        @memoized
+        def _EW(s, o, p): return dot(self.E[s], self.W[p])
+
+        @memoized
+        def _WE(s, o, p): return dot(self.W[p], self.E[o])
+
         #EW = np.array([self.cache[ps[i]]['s'][ss[i]] for i in range(len(ys))])
         #WE = np.array([self.cache[ps[i]]['o'][os[i]] for i in range(len(ys))])
-        EW = np.array([dot(self.E[s], self.W[p]) for ((s, _, p), _) in xys])
-        WE = np.array([dot(self.W[p], self.E[o]) for ((_, o, p), _) in xys])
+        EW = np.array([_EW(*x) for (x, _) in xys])
+        WE = np.array([_WE(*x) for (x, _) in xys])
         yscores = ys * np.sum(self.E[ss] * WE, axis=1)
         self.loss = np.sum(np.logaddexp(0, -yscores))
         fs = -(ys * af.Sigmoid.f(-yscores))[:, np.newaxis]
