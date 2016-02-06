@@ -108,7 +108,6 @@ class memoized(object):
             # uncachable, return direct function application
             return self.func(*args)
         if args in self.cache:
-            print('HIT')
             return self.cache[args]
         else:
             val = self.func(*args)
