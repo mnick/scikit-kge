@@ -55,9 +55,11 @@ trainer = StochasticTrainer(
 uses `AdaGrad` to update the parameter. 
 
 Available parameter update methods are
-##### SGD
-Basic stochastic gradient descent
+##### SGD (skge.param.SGD)
+Basic stochastic gradient descent. Only parameter is the learning rate.
 
+##### AdaGrad (skge.param.AdaGrad)
+AdaGrad method of [Duchi et al., 2011](http://jmlr.org/papers/volume12/duchi11a/duchi11a.pdf). Automatically adapts learning rate based on gradient history. Only parameter is the initial learning rate.
 
 ### Sampling
 sckit-kge implements different strategies to sample negative examples.
