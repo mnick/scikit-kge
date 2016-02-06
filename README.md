@@ -17,7 +17,7 @@ from skge import HolE, StochasticTrainer
 # ys = list of truth values for triples (1 = true, -1 = false)
 N, M, xs, ys = load_data('path to data')
 
-# instantiate HolE
+# instantiate HolE with an embedding space of size 100
 model = HolE((N, N, M), 100)
 
 # instantiate trainer
