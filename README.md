@@ -2,9 +2,27 @@
 
 scikit-kge is a Python library to compute embeddings of knowledge graphs. The
 library consists of different building blocks to train and develop models for
-knowledge graph embeddings. These buildings blocks are described in the following:
+knowledge graph embeddings.
 
-### Model (skge.base.Model)
+To compute a knowledge graph embedding, first instantiate a model and then train it
+with desired training method. For instance, to train [holographic embeddings of knowledge graphs](http://arxiv.org/abs/1510.04935) (HolE) with a logistcc loss function:
+
+```python
+from skge import HolE, StochasticTrainer
+
+N = 100000
+M = 1000
+
+xs, ys = load_data('path to data')
+
+model = HolE((N, N, M), 100)
+trainer = StochasticTrainer(model)
+trainer.fit(xs, ys)
+```
+
+These buildings blocks are described in the following:
+
+### Model
 
 Instantiating a model, e.g. HolE
 ```python
@@ -16,9 +34,12 @@ model = HolE(
 )
 ```
 
-### Trainer 
+### Trainer
 
-Training a model with logistic loss function
+scikit-kge supports two basic ways to train models: 
+
+##### StochasticTrainer (skge.base.StochasticTrainer)
+Trains a model with logistic loss function
 ```python
 trainer = StochasticTrainer(
     model,
@@ -29,7 +50,7 @@ trainer = StochasticTrainer(
 )
 self.trainer.fit(xs, ys)
 ```
-
+##### PairwiseStochasticTrainer (skge.base)
 To train a model with pairwise ranking loss
 ```python
 trainer = PairwiseStochasticTrainer(
