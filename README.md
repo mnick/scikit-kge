@@ -1,6 +1,6 @@
 # Knowledge Graph Embeddings
 
-scikit-kge is a Python library to compute embeddings of knowledge graphs
+scikit-kge is a Python library to compute embeddings of knowledge graphs.
 
 Instantiating a model, e.g. HolE
 ```python
@@ -38,5 +38,26 @@ trainer = PairwiseStochasticTrainer(
 self.trainer.fit(xs, ys)
 ```
 
+### Parameter Update
+scitkit-kge supports different methods to update the parameters of a model via
+the `param_update` keyword of `StochasticTrainer` and `PairwiseStochasticTrainer`.
+
+For instance,
+```python
+from skge.param import AdaGrad
+
+trainer = StochasticTrainer(
+    ...,
+    param_update=AdaGrad,
+    ...
+)
+```
+uses `AdaGrad` to update the parameter. 
+
+Available parameter update methods are
+##### SGD
+Basic stochastic gradient descent
+
+
 ### Sampling
-sckit-kge implements different strategies to sample negative examples
+sckit-kge implements different strategies to sample negative examples.
