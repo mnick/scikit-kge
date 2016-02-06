@@ -27,7 +27,7 @@ trainer = StochasticTrainer(model)
 trainer.fit(xs, ys)
 ```
 
-These buildings blocks are described in the following:
+The different available buildings blocks are described in more detail in the following:
 
 ### Model
 
