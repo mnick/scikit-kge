@@ -27,6 +27,8 @@ trainer = StochasticTrainer(model)
 trainer.fit(xs, ys)
 ```
 
+See the [repository for the experiments in the HolE paper](https://github.com/mnick/holographic-embeddings) for an extensive example how to use this library.
+
 The different available buildings blocks are described in more detail in the following:
 
 ### Model
