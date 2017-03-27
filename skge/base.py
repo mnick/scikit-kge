@@ -108,6 +108,8 @@ class StochasticTrainer(object):
             for key, param in self.model.params.items()
         }
 
+        self.stop_training = False
+
     def __getstate__(self):
         return self.hyperparams
 
@@ -127,16 +129,21 @@ class StochasticTrainer(object):
 
     def _optim(self, xys):
         idx = np.arange(len(xys))
-        self.batch_size = np.ceil(len(xys) / self.nbatches)
+        self.batch_size = int(np.ceil(len(xys) / self.nbatches))
         batch_idx = np.arange(self.batch_size, len(xys), self.batch_size)
 
         for self.epoch in range(1, self.max_epochs + 1):
-            # shuffle training examples
-            self._pre_epoch()
-            shuffle(idx)
+            # Check if must continue
+            if self.stop_training:
+                print("Stopped training")
+                break
 
             # store epoch for callback
             self.epoch_start = timeit.default_timer()
+
+            # shuffle training examples
+            self._pre_epoch()
+            shuffle(idx)
 
             # process mini-batches
             for batch in np.split(idx, batch_idx):
