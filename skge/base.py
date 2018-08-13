@@ -139,9 +139,9 @@ class StochasticTrainer(object):
             self.epoch_start = timeit.default_timer()
 
             # process mini-batches
-            for batch in np.split(idx, batch_idx):
+            for batch in np.split(batch_idx, idx):
                 # select indices for current batch
-                bxys = [xys[z] for z in batch]
+                bxys = [xys[int(z)] for z in batch]
                 self._process_batch(bxys)
 
             # check callback function, if false return
@@ -158,9 +158,13 @@ class StochasticTrainer(object):
             self.model._prepare_batch_step(xys)
 
         # take step for batch
-        grads = self.model._gradients(xys)
-        self.loss += self.model.loss
-        self._batch_step(grads)
+        if(len(xys) > 0):
+            grads = self.model._gradients(xys)
+        else:
+            grads = None
+        if grads is not None:
+            self.loss += self.model.loss
+            self._batch_step(grads)
 
     def _batch_step(self, grads):
         for paramID in self._updaters.keys():
@@ -218,7 +222,10 @@ class PairwiseStochasticTrainer(StochasticTrainer):
         # take step for batch
         if hasattr(self.model, '_prepare_batch_step'):
             self.model._prepare_batch_step(pxs, nxs)
-        grads = self.model._pairwise_gradients(pxs, nxs)
+        if(len(pxs) > 0):
+            grads = self.model._pairwise_gradients(pxs, nxs)
+        else:
+            grads = None
 
         # update if examples violate margin
         if grads is not None:
