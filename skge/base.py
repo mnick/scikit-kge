@@ -139,9 +139,9 @@ class StochasticTrainer(object):
             self.epoch_start = timeit.default_timer()
 
             # process mini-batches
-            for batch in np.split(idx, batch_idx):
+            for batch in np.split(batch_idx, idx):
                 # select indices for current batch
-                bxys = [xys[z] for z in batch]
+                bxys = [xys[int(z)] for z in batch]
                 self._process_batch(bxys)
 
             # check callback function, if false return
