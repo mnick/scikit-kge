@@ -158,9 +158,13 @@ class StochasticTrainer(object):
             self.model._prepare_batch_step(xys)
 
         # take step for batch
-        grads = self.model._gradients(xys)
-        self.loss += self.model.loss
-        self._batch_step(grads)
+        if(len(xys) > 0):
+            grads = self.model._gradients(xys)
+        else:
+            grads = None
+        if grads is not None:
+            self.loss += self.model.loss
+            self._batch_step(grads)
 
     def _batch_step(self, grads):
         for paramID in self._updaters.keys():
