@@ -218,7 +218,10 @@ class PairwiseStochasticTrainer(StochasticTrainer):
         # take step for batch
         if hasattr(self.model, '_prepare_batch_step'):
             self.model._prepare_batch_step(pxs, nxs)
-        grads = self.model._pairwise_gradients(pxs, nxs)
+        if(len(pxs) > 0):
+            grads = self.model._pairwise_gradients(pxs, nxs)
+        else:
+            grads = None
 
         # update if examples violate margin
         if grads is not None:
