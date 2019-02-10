@@ -5,7 +5,7 @@ library consists of different building blocks to train and develop models for
 knowledge graph embeddings.
 
 To compute a knowledge graph embedding, first instantiate a model and then train it
-with desired training method. For instance, to train [holographic embeddings of knowledge graphs](http://arxiv.org/abs/1510.04935) (HolE) with a logistcc loss function:
+with desired training method. For instance, to train [holographic embeddings of knowledge graphs](http://arxiv.org/abs/1510.04935) (HolE) with a logistic loss function:
 
 ```python
 from skge import HolE, StochasticTrainer
